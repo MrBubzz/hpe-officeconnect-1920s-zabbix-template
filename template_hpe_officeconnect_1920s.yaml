@@ -1,0 +1,843 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: 9d4d85c657ab4c6aaeecceba392d2988
+      name: 'Network Appliance'
+    - uuid: 7df96b18c230490a9a0a9e2307226338
+      name: Templates
+  templates:
+    - uuid: fca5ba76a0844fd8908368c17fd839c5
+      template: 'HP OfficeConnect 19XX by SNMP - PLANET'
+      name: 'HP OfficeConnect 19XX by SNMP - PLANET'
+      description: |
+        Template HPE OfficeConnect 1920S (JL380A/JL381A/JL382A/JL383A/JL384A/JL385A/JL386A) by SNMP.
+
+        MIBs used: SNMPv2-MIB, IF-MIB, ENTITY-MIB, BRIDGE-MIB.
+
+        Interface discovery ignores administratively down ports (ifAdminStatus=2) and the internal "CPU" interface.
+        To ignore link down alerts on a specific port, set the context macro {$IFCONTROL:"<ifName>"} to 0 on the host (e.g. {$IFCONTROL:"46"} = 0).
+      groups:
+        - name: 'Network Appliance'
+        - name: Templates
+      items:
+        - uuid: 3b5b8a58cde54b2f940aa79a1b24626a
+          name: 'ICMP ping'
+          type: SIMPLE
+          key: icmpping
+          description: |
+            The host accessibility by ICMP ping.
+            0 - ICMP ping fails;
+            1 - ICMP ping successful.
+          valuemap:
+            name: 'Service state'
+          tags:
+            - tag: component
+              value: health
+            - tag: component
+              value: network
+          triggers:
+            - uuid: ffbc6c83dc4b455bbeaf603819fed72d
+              expression: 'max(/HP OfficeConnect 19XX by SNMP - PLANET/icmpping,#3)=0'
+              name: 'HPE 1920S: Unavailable by ICMP ping'
+              priority: HIGH
+              description: 'Last three attempts returned timeout. Please check device connectivity.'
+              tags:
+                - tag: scope
+                  value: availability
+        - uuid: ac3bbe335a15402688c17ae55c14337d
+          name: 'ICMP loss'
+          type: SIMPLE
+          key: icmppingloss
+          value_type: FLOAT
+          units: '%'
+          description: 'The percentage of lost packets.'
+          tags:
+            - tag: component
+              value: health
+            - tag: component
+              value: network
+          triggers:
+            - uuid: 7109bf7f85ca4a0582020bada172af76
+              expression: 'min(/HP OfficeConnect 19XX by SNMP - PLANET/icmppingloss,5m)>{$ICMP_LOSS_WARN} and min(/HP OfficeConnect 19XX by SNMP - PLANET/icmppingloss,5m)<100'
+              name: 'HPE 1920S: High ICMP ping loss'
+              opdata: 'Loss: {ITEM.LASTVALUE1}'
+              priority: WARNING
+              description: 'ICMP packets loss detected.'
+              dependencies:
+                - name: 'HPE 1920S: Unavailable by ICMP ping'
+                  expression: 'max(/HP OfficeConnect 19XX by SNMP - PLANET/icmpping,#3)=0'
+              tags:
+                - tag: scope
+                  value: availability
+                - tag: scope
+                  value: performance
+        - uuid: b33f441af08b466daef6adf0438de0b6
+          name: 'ICMP response time'
+          type: SIMPLE
+          key: icmppingsec
+          value_type: FLOAT
+          units: s
+          description: 'The ICMP ping response time (in seconds).'
+          tags:
+            - tag: component
+              value: health
+            - tag: component
+              value: network
+          triggers:
+            - uuid: 423e05fc9d454b04b60cf3386776c2a3
+              expression: 'avg(/HP OfficeConnect 19XX by SNMP - PLANET/icmppingsec,5m)>{$ICMP_RESPONSE_TIME_WARN}'
+              name: 'HPE 1920S: High ICMP ping response time'
+              opdata: 'Value: {ITEM.LASTVALUE1}'
+              priority: WARNING
+              description: 'Average ICMP response time is too high.'
+              dependencies:
+                - name: 'HPE 1920S: High ICMP ping loss'
+                  expression: 'min(/HP OfficeConnect 19XX by SNMP - PLANET/icmppingloss,5m)>{$ICMP_LOSS_WARN} and min(/HP OfficeConnect 19XX by SNMP - PLANET/icmppingloss,5m)<100'
+                - name: 'HPE 1920S: Unavailable by ICMP ping'
+                  expression: 'max(/HP OfficeConnect 19XX by SNMP - PLANET/icmpping,#3)=0'
+              tags:
+                - tag: scope
+                  value: availability
+                - tag: scope
+                  value: performance
+        - uuid: 9844d656f1b94b0c83eb3443d56f4245
+          name: 'Spanning tree: topology changes'
+          type: SNMP_AGENT
+          snmp_oid: 'get[1.3.6.1.2.1.17.2.4.0]'
+          key: 'stp.topchanges[dot1dStpTopChanges.0]'
+          delay: 5m
+          description: |
+            MIB: BRIDGE-MIB
+            The total number of topology changes detected by this bridge since the management entity was last reset or initialized.
+          tags:
+            - tag: component
+              value: stp
+          triggers:
+            - uuid: cd325bfc7af8433ba9ffaefb41dd6f5c
+              expression: 'change(/HP OfficeConnect 19XX by SNMP - PLANET/stp.topchanges[dot1dStpTopChanges.0])>0'
+              name: 'HPE 1920S: Spanning tree topology has changed'
+              opdata: 'Total changes: {ITEM.LASTVALUE1}'
+              priority: INFO
+              description: 'The STP topology changed since the previous check (port flap, new switch or loop protection). The problem resolves at the next check if no new change occurs.'
+              tags:
+                - tag: scope
+                  value: notice
+        - uuid: aedd18560d1849c8ab89f611af1bd91b
+          name: 'Spanning tree: time since last topology change'
+          type: SNMP_AGENT
+          snmp_oid: 'get[1.3.6.1.2.1.17.2.3.0]'
+          key: 'stp.toptime[dot1dStpTimeSinceTopologyChange.0]'
+          delay: 5m
+          trends: '0'
+          units: uptime
+          description: |
+            MIB: BRIDGE-MIB
+            The time (in hundredths of a second) since the last time a topology change was detected by the bridge entity.
+          preprocessing:
+            - type: MULTIPLIER
+              parameters:
+                - '0.01'
+          tags:
+            - tag: component
+              value: stp
+        - uuid: 78c6166070bb4cb89b7e31c80da88b89
+          name: 'System contact details'
+          type: SNMP_AGENT
+          snmp_oid: 'get[1.3.6.1.2.1.1.4.0]'
+          key: 'system.contact[sysContact.0]'
+          delay: 15m
+          value_type: CHAR
+          trends: '0'
+          description: 'MIB: SNMPv2-MIB'
+          inventory_link: CONTACT
+          preprocessing:
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 12h
+          tags:
+            - tag: component
+              value: system
+        - uuid: 80f970f35dba444b8f1a2cfb10ec2baf
+          name: 'System description'
+          type: SNMP_AGENT
+          snmp_oid: 'get[1.3.6.1.2.1.1.1.0]'
+          key: 'system.descr[sysDescr.0]'
+          delay: 15m
+          value_type: CHAR
+          trends: '0'
+          description: 'MIB: SNMPv2-MIB'
+          preprocessing:
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 12h
+          tags:
+            - tag: component
+              value: system
+        - uuid: 196f438e19fc43eb931139daccd0a779
+          name: 'System location'
+          type: SNMP_AGENT
+          snmp_oid: 'get[1.3.6.1.2.1.1.6.0]'
+          key: 'system.location[sysLocation.0]'
+          delay: 15m
+          value_type: CHAR
+          trends: '0'
+          description: 'MIB: SNMPv2-MIB'
+          inventory_link: LOCATION
+          preprocessing:
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 12h
+          tags:
+            - tag: component
+              value: system
+        - uuid: fba6e545646e49a7a0d6bbbda6ba21bf
+          name: 'System name'
+          type: SNMP_AGENT
+          snmp_oid: 'get[1.3.6.1.2.1.1.5.0]'
+          key: system.name
+          delay: 15m
+          value_type: CHAR
+          trends: '0'
+          description: 'MIB: SNMPv2-MIB'
+          inventory_link: NAME
+          preprocessing:
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 12h
+          tags:
+            - tag: component
+              value: system
+          triggers:
+            - uuid: f56518e85c844d6fa695c196332b4bbe
+              expression: 'last(/HP OfficeConnect 19XX by SNMP - PLANET/system.name,#1)<>last(/HP OfficeConnect 19XX by SNMP - PLANET/system.name,#2) and length(last(/HP OfficeConnect 19XX by SNMP - PLANET/system.name))>0'
+              name: 'HPE 1920S: System name has changed'
+              event_name: 'HPE 1920S: System name has changed (new name: {ITEM.VALUE})'
+              priority: INFO
+              description: 'The name of the system has changed. Acknowledge to close the problem manually.'
+              manual_close: 'YES'
+              tags:
+                - tag: scope
+                  value: notice
+        - uuid: 663945bb998a4598b77dc6b89beb0289
+          name: Uptime
+          type: SNMP_AGENT
+          snmp_oid: 'get[1.3.6.1.2.1.1.3.0]'
+          key: 'system.net.uptime[sysUpTime.0]'
+          delay: 1m
+          history: 7d
+          trends: '0'
+          units: uptime
+          description: |
+            MIB: SNMPv2-MIB
+            Time since the network management portion of the system was last re-initialized.
+          preprocessing:
+            - type: MULTIPLIER
+              parameters:
+                - '0.01'
+          tags:
+            - tag: component
+              value: system
+          triggers:
+            - uuid: 997e1a1a8bd948db953955df229da49d
+              expression: 'last(/HP OfficeConnect 19XX by SNMP - PLANET/system.net.uptime[sysUpTime.0])<10m'
+              name: 'HPE 1920S: {HOST.NAME} has been restarted'
+              event_name: 'HPE 1920S: {HOST.NAME} has been restarted (uptime < 10m)'
+              priority: WARNING
+              description: 'Uptime is less than 10 minutes.'
+              manual_close: 'YES'
+              dependencies:
+                - name: 'HPE 1920S: No SNMP data collection'
+                  expression: 'max(/HP OfficeConnect 19XX by SNMP - PLANET/zabbix[host,snmp,available],{$SNMP.TIMEOUT})=0'
+              tags:
+                - tag: scope
+                  value: notice
+        - uuid: c283e308867e4a8881fce8e6aceb4c20
+          name: 'SNMP agent availability'
+          type: INTERNAL
+          key: 'zabbix[host,snmp,available]'
+          description: |
+            Availability of SNMP checks on the host.
+            0 - not available
+            1 - available
+            2 - unknown
+          valuemap:
+            name: zabbix.host.available
+          tags:
+            - tag: component
+              value: health
+            - tag: component
+              value: network
+          triggers:
+            - uuid: 89612a1ceb42442bade0aa2cc24051bc
+              expression: 'max(/HP OfficeConnect 19XX by SNMP - PLANET/zabbix[host,snmp,available],{$SNMP.TIMEOUT})=0'
+              name: 'HPE 1920S: No SNMP data collection'
+              opdata: 'Current state: {ITEM.LASTVALUE1}'
+              priority: WARNING
+              description: 'SNMP is not available for polling. Please check device connectivity and SNMP settings.'
+              dependencies:
+                - name: 'HPE 1920S: Unavailable by ICMP ping'
+                  expression: 'max(/HP OfficeConnect 19XX by SNMP - PLANET/icmpping,#3)=0'
+              tags:
+                - tag: scope
+                  value: availability
+      discovery_rules:
+        - uuid: cb8bebcbac064681a67cd0746616635f
+          name: 'Entity Discovery'
+          type: SNMP_AGENT
+          snmp_oid: 'discovery[{#ENT_CLASS},1.3.6.1.2.1.47.1.1.1.1.5,{#ENT_NAME},1.3.6.1.2.1.47.1.1.1.1.7]'
+          key: entity.discovery
+          delay: 1h
+          filter:
+            conditions:
+              - macro: '{#ENT_CLASS}'
+                value: ^3$
+                formulaid: A
+          description: 'Discovers the chassis (entPhysicalClass = chassis(3)) from ENTITY-MIB.'
+          item_prototypes:
+            - uuid: fb3249229ca1414eb5e7336ce2122f7c
+              name: '{#ENT_NAME}: Hardware model name'
+              type: SNMP_AGENT
+              snmp_oid: 'get[1.3.6.1.2.1.47.1.1.1.1.2.{#SNMPINDEX}]'
+              key: 'system.hw.model[entPhysicalDescr.{#SNMPINDEX}]'
+              delay: 1h
+              value_type: CHAR
+              trends: '0'
+              description: 'MIB: ENTITY-MIB'
+              preprocessing:
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1d
+              tags:
+                - tag: component
+                  value: system
+            - uuid: f72971730b7a4dfcb4ca4945374887f9
+              name: '{#ENT_NAME}: Hardware serial number'
+              type: SNMP_AGENT
+              snmp_oid: 'get[1.3.6.1.2.1.47.1.1.1.1.11.{#SNMPINDEX}]'
+              key: 'system.hw.serialnumber[entPhysicalSerialNum.{#SNMPINDEX}]'
+              delay: 1h
+              value_type: CHAR
+              trends: '0'
+              description: 'MIB: ENTITY-MIB'
+              preprocessing:
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1d
+              tags:
+                - tag: component
+                  value: system
+              trigger_prototypes:
+                - uuid: 2695678624e047b7bf10c62cac1e537b
+                  expression: 'last(/HP OfficeConnect 19XX by SNMP - PLANET/system.hw.serialnumber[entPhysicalSerialNum.{#SNMPINDEX}],#1)<>last(/HP OfficeConnect 19XX by SNMP - PLANET/system.hw.serialnumber[entPhysicalSerialNum.{#SNMPINDEX}],#2) and length(last(/HP OfficeConnect 19XX by SNMP - PLANET/system.hw.serialnumber[entPhysicalSerialNum.{#SNMPINDEX}]))>0'
+                  name: 'HPE 1920S: {#ENT_NAME}: Device has been replaced'
+                  event_name: 'HPE 1920S: {#ENT_NAME}: Device has been replaced (new serial number received)'
+                  priority: INFO
+                  description: 'Device serial number has changed. Acknowledge to close the problem manually.'
+                  manual_close: 'YES'
+                  tags:
+                    - tag: scope
+                      value: notice
+            - uuid: 5f30f89f8d004560810eafe5f4bd2a55
+              name: '{#ENT_NAME}: Operating system'
+              type: SNMP_AGENT
+              snmp_oid: 'get[1.3.6.1.2.1.47.1.1.1.1.10.{#SNMPINDEX}]'
+              key: 'system.sw.os[entPhysicalSoftwareRev.{#SNMPINDEX}]'
+              delay: 1h
+              value_type: CHAR
+              trends: '0'
+              description: |
+                MIB: ENTITY-MIB
+                Firmware version running on the switch.
+              preprocessing:
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1d
+              tags:
+                - tag: component
+                  value: system
+              trigger_prototypes:
+                - uuid: 5918d2d7ab994e838b289e7139ef96fd
+                  expression: 'last(/HP OfficeConnect 19XX by SNMP - PLANET/system.sw.os[entPhysicalSoftwareRev.{#SNMPINDEX}],#1)<>last(/HP OfficeConnect 19XX by SNMP - PLANET/system.sw.os[entPhysicalSoftwareRev.{#SNMPINDEX}],#2) and length(last(/HP OfficeConnect 19XX by SNMP - PLANET/system.sw.os[entPhysicalSoftwareRev.{#SNMPINDEX}]))>0'
+                  name: 'HPE 1920S: {#ENT_NAME}: Firmware has changed'
+                  event_name: 'HPE 1920S: {#ENT_NAME}: Firmware has changed (new version: {ITEM.VALUE})'
+                  priority: INFO
+                  description: 'Firmware version has changed. Acknowledge to close the problem manually.'
+                  manual_close: 'YES'
+                  tags:
+                    - tag: scope
+                      value: notice
+        - uuid: 4a111c3f3b6b42bcb22ea4c9def6680d
+          name: 'Network interfaces discovery'
+          type: SNMP_AGENT
+          snmp_oid: 'discovery[{#IFOPERSTATUS},1.3.6.1.2.1.2.2.1.8,{#IFADMINSTATUS},1.3.6.1.2.1.2.2.1.7,{#IFALIAS},1.3.6.1.2.1.31.1.1.1.18,{#IFNAME},1.3.6.1.2.1.31.1.1.1.1,{#IFDESCR},1.3.6.1.2.1.2.2.1.2,{#IFTYPE},1.3.6.1.2.1.2.2.1.3]'
+          key: net.if.discovery
+          delay: 1h
+          filter:
+            evaltype: AND
+            conditions:
+              - macro: '{#IFADMINSTATUS}'
+                value: '{$NET.IF.IFADMINSTATUS.MATCHES}'
+                formulaid: A
+              - macro: '{#IFADMINSTATUS}'
+                value: '{$NET.IF.IFADMINSTATUS.NOT_MATCHES}'
+                operator: NOT_MATCHES_REGEX
+                formulaid: B
+              - macro: '{#IFALIAS}'
+                value: '{$NET.IF.IFALIAS.MATCHES}'
+                formulaid: C
+              - macro: '{#IFALIAS}'
+                value: '{$NET.IF.IFALIAS.NOT_MATCHES}'
+                operator: NOT_MATCHES_REGEX
+                formulaid: D
+              - macro: '{#IFDESCR}'
+                value: '{$NET.IF.IFDESCR.MATCHES}'
+                formulaid: E
+              - macro: '{#IFDESCR}'
+                value: '{$NET.IF.IFDESCR.NOT_MATCHES}'
+                operator: NOT_MATCHES_REGEX
+                formulaid: F
+              - macro: '{#IFNAME}'
+                value: '{$NET.IF.IFNAME.MATCHES}'
+                formulaid: G
+              - macro: '{#IFNAME}'
+                value: '{$NET.IF.IFNAME.NOT_MATCHES}'
+                operator: NOT_MATCHES_REGEX
+                formulaid: H
+              - macro: '{#IFOPERSTATUS}'
+                value: '{$NET.IF.IFOPERSTATUS.MATCHES}'
+                formulaid: I
+              - macro: '{#IFOPERSTATUS}'
+                value: '{$NET.IF.IFOPERSTATUS.NOT_MATCHES}'
+                operator: NOT_MATCHES_REGEX
+                formulaid: J
+              - macro: '{#IFTYPE}'
+                value: '{$NET.IF.IFTYPE.MATCHES}'
+                formulaid: K
+              - macro: '{#IFTYPE}'
+                value: '{$NET.IF.IFTYPE.NOT_MATCHES}'
+                operator: NOT_MATCHES_REGEX
+                formulaid: L
+          description: 'Discovering interfaces from IF-MIB. By default, administratively down ports and the internal CPU interface are ignored.'
+          item_prototypes:
+            - uuid: 4b3ba88a779f493ea223396b0493dfde
+              name: 'Interface {#IFNAME}({#IFALIAS}): Inbound packets discarded'
+              type: SNMP_AGENT
+              snmp_oid: 'get[1.3.6.1.2.1.2.2.1.13.{#SNMPINDEX}]'
+              key: 'net.if.in.discards[ifInDiscards.{#SNMPINDEX}]'
+              delay: 3m
+              description: |
+                MIB: IF-MIB
+                The number of inbound packets which were chosen to be discarded even though no errors had been detected.
+              preprocessing:
+                - type: CHANGE_PER_SECOND
+                  parameters:
+                    - ''
+              tags:
+                - tag: component
+                  value: network
+                - tag: description
+                  value: '{#IFALIAS}'
+                - tag: interface
+                  value: '{#IFNAME}'
+            - uuid: f99a1458476f4db0ac435f5504a5785a
+              name: 'Interface {#IFNAME}({#IFALIAS}): Inbound packets with errors'
+              type: SNMP_AGENT
+              snmp_oid: 'get[1.3.6.1.2.1.2.2.1.14.{#SNMPINDEX}]'
+              key: 'net.if.in.errors[ifInErrors.{#SNMPINDEX}]'
+              delay: 3m
+              description: |
+                MIB: IF-MIB
+                The number of inbound packets that contained errors (CRC, alignment...) preventing them from being deliverable to a higher-layer protocol.
+              preprocessing:
+                - type: CHANGE_PER_SECOND
+                  parameters:
+                    - ''
+              tags:
+                - tag: component
+                  value: network
+                - tag: description
+                  value: '{#IFALIAS}'
+                - tag: interface
+                  value: '{#IFNAME}'
+            - uuid: 5340a10059cc40acb12bb01e169d9832
+              name: 'Interface {#IFNAME}({#IFALIAS}): Bits received'
+              type: SNMP_AGENT
+              snmp_oid: 'get[1.3.6.1.2.1.31.1.1.1.6.{#SNMPINDEX}]'
+              key: 'net.if.in[ifHCInOctets.{#SNMPINDEX}]'
+              delay: 1m
+              units: bps
+              description: |
+                MIB: IF-MIB
+                The total number of octets received on the interface, including framing characters (64-bit counter).
+              preprocessing:
+                - type: CHANGE_PER_SECOND
+                  parameters:
+                    - ''
+                - type: MULTIPLIER
+                  parameters:
+                    - '8'
+              tags:
+                - tag: component
+                  value: network
+                - tag: description
+                  value: '{#IFALIAS}'
+                - tag: interface
+                  value: '{#IFNAME}'
+            - uuid: c220d76c5a424c248de29b506b6050af
+              name: 'Interface {#IFNAME}({#IFALIAS}): Outbound packets discarded'
+              type: SNMP_AGENT
+              snmp_oid: 'get[1.3.6.1.2.1.2.2.1.19.{#SNMPINDEX}]'
+              key: 'net.if.out.discards[ifOutDiscards.{#SNMPINDEX}]'
+              delay: 3m
+              description: |
+                MIB: IF-MIB
+                The number of outbound packets which were chosen to be discarded even though no errors had been detected (e.g. buffer congestion).
+              preprocessing:
+                - type: CHANGE_PER_SECOND
+                  parameters:
+                    - ''
+              tags:
+                - tag: component
+                  value: network
+                - tag: description
+                  value: '{#IFALIAS}'
+                - tag: interface
+                  value: '{#IFNAME}'
+            - uuid: bd83193c544647fc93c73848b6af684a
+              name: 'Interface {#IFNAME}({#IFALIAS}): Outbound packets with errors'
+              type: SNMP_AGENT
+              snmp_oid: 'get[1.3.6.1.2.1.2.2.1.20.{#SNMPINDEX}]'
+              key: 'net.if.out.errors[ifOutErrors.{#SNMPINDEX}]'
+              delay: 3m
+              description: |
+                MIB: IF-MIB
+                The number of outbound packets that could not be transmitted because of errors.
+              preprocessing:
+                - type: CHANGE_PER_SECOND
+                  parameters:
+                    - ''
+              tags:
+                - tag: component
+                  value: network
+                - tag: description
+                  value: '{#IFALIAS}'
+                - tag: interface
+                  value: '{#IFNAME}'
+            - uuid: 8a79bfc624f44c8c9f05fd5638f10d96
+              name: 'Interface {#IFNAME}({#IFALIAS}): Bits sent'
+              type: SNMP_AGENT
+              snmp_oid: 'get[1.3.6.1.2.1.31.1.1.1.10.{#SNMPINDEX}]'
+              key: 'net.if.out[ifHCOutOctets.{#SNMPINDEX}]'
+              delay: 1m
+              units: bps
+              description: |
+                MIB: IF-MIB
+                The total number of octets transmitted out of the interface, including framing characters (64-bit counter).
+              preprocessing:
+                - type: CHANGE_PER_SECOND
+                  parameters:
+                    - ''
+                - type: MULTIPLIER
+                  parameters:
+                    - '8'
+              tags:
+                - tag: component
+                  value: network
+                - tag: description
+                  value: '{#IFALIAS}'
+                - tag: interface
+                  value: '{#IFNAME}'
+            - uuid: 4850393e839047e79b0e9e2edaf50142
+              name: 'Interface {#IFNAME}({#IFALIAS}): Speed'
+              type: SNMP_AGENT
+              snmp_oid: 'get[1.3.6.1.2.1.31.1.1.1.15.{#SNMPINDEX}]'
+              key: 'net.if.speed[ifHighSpeed.{#SNMPINDEX}]'
+              delay: 5m
+              trends: '0'
+              units: bps
+              description: |
+                MIB: IF-MIB
+                Current bandwidth of the interface (ifHighSpeed, converted from Mbps to bps). 0 when the link is down.
+              preprocessing:
+                - type: MULTIPLIER
+                  parameters:
+                    - '1000000'
+              tags:
+                - tag: component
+                  value: network
+                - tag: description
+                  value: '{#IFALIAS}'
+                - tag: interface
+                  value: '{#IFNAME}'
+            - uuid: bc541f5437a04aa4bc4b087a807ff4a1
+              name: 'Interface {#IFNAME}({#IFALIAS}): Operational status'
+              type: SNMP_AGENT
+              snmp_oid: 'get[1.3.6.1.2.1.2.2.1.8.{#SNMPINDEX}]'
+              key: 'net.if.status[ifOperStatus.{#SNMPINDEX}]'
+              delay: 1m
+              trends: '0'
+              description: |
+                MIB: IF-MIB
+                The current operational state of the interface.
+              valuemap:
+                name: 'IF-MIB::ifOperStatus'
+              tags:
+                - tag: component
+                  value: network
+                - tag: description
+                  value: '{#IFALIAS}'
+                - tag: interface
+                  value: '{#IFNAME}'
+              trigger_prototypes:
+                - uuid: 38b978510267402496a71989a278df87
+                  expression: '{$IFCONTROL:"{#IFNAME}"}=1 and last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}])=2 and (last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}],#1)<>last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}],#2))'
+                  recovery_mode: RECOVERY_EXPRESSION
+                  recovery_expression: 'last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}])<>2 or {$IFCONTROL:"{#IFNAME}"}=0'
+                  name: 'HPE 1920S: Interface {#IFNAME}({#IFALIAS}): Link down'
+                  opdata: 'Current state: {ITEM.LASTVALUE1}'
+                  priority: AVERAGE
+                  description: |
+                    Fires when the operational status goes from up to down (so it does not fire for ports that have always been down).
+                    Set the context macro {$IFCONTROL:"{#IFNAME}"} to 0 on the host to ignore this port.
+                    WARNING: if closed manually, it will not fire again until the port goes up then down again.
+                  manual_close: 'YES'
+                  tags:
+                    - tag: scope
+                      value: availability
+            - uuid: a3589265c4704aba99af9827f0aa5c1a
+              name: 'Interface {#IFNAME}({#IFALIAS}): Interface type'
+              type: SNMP_AGENT
+              snmp_oid: 'get[1.3.6.1.2.1.2.2.1.3.{#SNMPINDEX}]'
+              key: 'net.if.type[ifType.{#SNMPINDEX}]'
+              delay: 1h
+              trends: '0'
+              description: |
+                MIB: IF-MIB
+                The type of interface (6 = ethernetCsmacd for physical ports, 1 = other for TRK aggregates on this switch).
+              valuemap:
+                name: 'IF-MIB::ifType'
+              preprocessing:
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1d
+              tags:
+                - tag: component
+                  value: network
+                - tag: description
+                  value: '{#IFALIAS}'
+                - tag: interface
+                  value: '{#IFNAME}'
+          trigger_prototypes:
+            - uuid: 0dfa6a2c5fdc48588b532d96cd7ca0e5
+              expression: |
+                change(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.speed[ifHighSpeed.{#SNMPINDEX}])<0 and last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.speed[ifHighSpeed.{#SNMPINDEX}])>0
+                and last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.type[ifType.{#SNMPINDEX}])=6
+                and last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}])<>2
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: |
+                (change(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.speed[ifHighSpeed.{#SNMPINDEX}])>0 and last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.speed[ifHighSpeed.{#SNMPINDEX}],#2)>0) or
+                (last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}])=2)
+              name: 'HPE 1920S: Interface {#IFNAME}({#IFALIAS}): Ethernet has changed to lower speed than it was before'
+              opdata: 'Current reported speed: {ITEM.LASTVALUE1}'
+              priority: INFO
+              description: 'This Ethernet connection has transitioned down from its known maximum speed. This might be a sign of autonegotiation issues or a faulty cable. Acknowledge to close the problem manually.'
+              manual_close: 'YES'
+              dependencies:
+                - name: 'HPE 1920S: Interface {#IFNAME}({#IFALIAS}): Link down'
+                  expression: '{$IFCONTROL:"{#IFNAME}"}=1 and last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}])=2 and (last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}],#1)<>last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}],#2))'
+                  recovery_expression: 'last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}])<>2 or {$IFCONTROL:"{#IFNAME}"}=0'
+              tags:
+                - tag: scope
+                  value: performance
+            - uuid: 4e0f5f221b474116b00a23eb28d41677
+              expression: |
+                (avg(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.in[ifHCInOctets.{#SNMPINDEX}],15m)>({$IF.UTIL.MAX:"{#IFNAME}"}/100)*last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.speed[ifHighSpeed.{#SNMPINDEX}]) or
+                avg(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.out[ifHCOutOctets.{#SNMPINDEX}],15m)>({$IF.UTIL.MAX:"{#IFNAME}"}/100)*last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.speed[ifHighSpeed.{#SNMPINDEX}])) and
+                last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.speed[ifHighSpeed.{#SNMPINDEX}])>0
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: |
+                avg(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.in[ifHCInOctets.{#SNMPINDEX}],15m)<(({$IF.UTIL.MAX:"{#IFNAME}"}-3)/100)*last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.speed[ifHighSpeed.{#SNMPINDEX}]) and
+                avg(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.out[ifHCOutOctets.{#SNMPINDEX}],15m)<(({$IF.UTIL.MAX:"{#IFNAME}"}-3)/100)*last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.speed[ifHighSpeed.{#SNMPINDEX}])
+              name: 'HPE 1920S: Interface {#IFNAME}({#IFALIAS}): High bandwidth usage'
+              event_name: 'HPE 1920S: Interface {#IFNAME}({#IFALIAS}): High bandwidth usage (>{$IF.UTIL.MAX:"{#IFNAME}"}%)'
+              opdata: 'In: {ITEM.LASTVALUE1}, out: {ITEM.LASTVALUE3}, speed: {ITEM.LASTVALUE2}'
+              priority: WARNING
+              description: 'The utilization of the network interface is close to its estimated maximum bandwidth (15 min average).'
+              manual_close: 'YES'
+              dependencies:
+                - name: 'HPE 1920S: Interface {#IFNAME}({#IFALIAS}): Link down'
+                  expression: '{$IFCONTROL:"{#IFNAME}"}=1 and last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}])=2 and (last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}],#1)<>last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}],#2))'
+                  recovery_expression: 'last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}])<>2 or {$IFCONTROL:"{#IFNAME}"}=0'
+              tags:
+                - tag: scope
+                  value: performance
+            - uuid: 9aa249f2e74c4edba62c58d1b13dca26
+              expression: |
+                min(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.in.errors[ifInErrors.{#SNMPINDEX}],5m)>{$IF.ERRORS.WARN:"{#IFNAME}"}
+                or min(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.out.errors[ifOutErrors.{#SNMPINDEX}],5m)>{$IF.ERRORS.WARN:"{#IFNAME}"}
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: |
+                max(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.in.errors[ifInErrors.{#SNMPINDEX}],5m)<{$IF.ERRORS.WARN:"{#IFNAME}"}*0.8
+                and max(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.out.errors[ifOutErrors.{#SNMPINDEX}],5m)<{$IF.ERRORS.WARN:"{#IFNAME}"}*0.8
+              name: 'HPE 1920S: Interface {#IFNAME}({#IFALIAS}): High error rate'
+              event_name: 'HPE 1920S: Interface {#IFNAME}({#IFALIAS}): High error rate (>{$IF.ERRORS.WARN:"{#IFNAME}"} for 5m)'
+              opdata: 'errors in: {ITEM.LASTVALUE1}, errors out: {ITEM.LASTVALUE2}'
+              priority: WARNING
+              description: 'Errors per second above the threshold for 5 minutes (CRC errors are often caused by a faulty cable, SFP or duplex mismatch). It recovers when it is below 80% of the threshold.'
+              manual_close: 'YES'
+              dependencies:
+                - name: 'HPE 1920S: Interface {#IFNAME}({#IFALIAS}): Link down'
+                  expression: '{$IFCONTROL:"{#IFNAME}"}=1 and last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}])=2 and (last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}],#1)<>last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}],#2))'
+                  recovery_expression: 'last(/HP OfficeConnect 19XX by SNMP - PLANET/net.if.status[ifOperStatus.{#SNMPINDEX}])<>2 or {$IFCONTROL:"{#IFNAME}"}=0'
+              tags:
+                - tag: scope
+                  value: performance
+          graph_prototypes:
+            - uuid: ddb87447291c4a058f16ab9033408f0f
+              name: 'Interface {#IFNAME}({#IFALIAS}): Network traffic'
+              graph_items:
+                - drawtype: GRADIENT_LINE
+                  color: 199C0D
+                  item:
+                    host: 'HP OfficeConnect 19XX by SNMP - PLANET'
+                    key: 'net.if.in[ifHCInOctets.{#SNMPINDEX}]'
+                - sortorder: '1'
+                  drawtype: BOLD_LINE
+                  color: F63100
+                  item:
+                    host: 'HP OfficeConnect 19XX by SNMP - PLANET'
+                    key: 'net.if.out[ifHCOutOctets.{#SNMPINDEX}]'
+                - sortorder: '2'
+                  color: 00611C
+                  yaxisside: RIGHT
+                  item:
+                    host: 'HP OfficeConnect 19XX by SNMP - PLANET'
+                    key: 'net.if.out.errors[ifOutErrors.{#SNMPINDEX}]'
+                - sortorder: '3'
+                  color: F7941D
+                  yaxisside: RIGHT
+                  item:
+                    host: 'HP OfficeConnect 19XX by SNMP - PLANET'
+                    key: 'net.if.in.errors[ifInErrors.{#SNMPINDEX}]'
+                - sortorder: '4'
+                  color: FC6EA3
+                  yaxisside: RIGHT
+                  item:
+                    host: 'HP OfficeConnect 19XX by SNMP - PLANET'
+                    key: 'net.if.out.discards[ifOutDiscards.{#SNMPINDEX}]'
+                - sortorder: '5'
+                  color: 6C59DC
+                  yaxisside: RIGHT
+                  item:
+                    host: 'HP OfficeConnect 19XX by SNMP - PLANET'
+                    key: 'net.if.in.discards[ifInDiscards.{#SNMPINDEX}]'
+          preprocessing:
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 4h
+      tags:
+        - tag: class
+          value: network
+        - tag: target
+          value: hpe
+        - tag: target
+          value: officeconnect
+      macros:
+        - macro: '{$ICMP_LOSS_WARN}'
+          value: '20'
+          description: 'Warning threshold of ICMP packet loss in %.'
+        - macro: '{$ICMP_RESPONSE_TIME_WARN}'
+          value: '0.15'
+          description: 'Warning threshold of the average ICMP response time in seconds.'
+        - macro: '{$IF.ERRORS.WARN}'
+          value: '2'
+          description: 'Warning threshold of errors per second on an interface. Can be overridden per interface with context, e.g. {$IF.ERRORS.WARN:"49"}.'
+        - macro: '{$IF.UTIL.MAX}'
+          value: '90'
+          description: 'Bandwidth usage threshold in %. Can be overridden per interface with context, e.g. {$IF.UTIL.MAX:"TRK 1"}.'
+        - macro: '{$IFCONTROL}'
+          value: '1'
+          description: 'Link down alerting. Set {$IFCONTROL:"<ifName>"} to 0 on the host to ignore a port.'
+        - macro: '{$NET.IF.IFADMINSTATUS.MATCHES}'
+          value: '^.*'
+        - macro: '{$NET.IF.IFADMINSTATUS.NOT_MATCHES}'
+          value: ^2$
+          description: 'Ignore down(2) administrative status'
+        - macro: '{$NET.IF.IFALIAS.MATCHES}'
+          value: '.*'
+        - macro: '{$NET.IF.IFALIAS.NOT_MATCHES}'
+          value: CHANGE_IF_NEEDED
+        - macro: '{$NET.IF.IFDESCR.MATCHES}'
+          value: '.*'
+        - macro: '{$NET.IF.IFDESCR.NOT_MATCHES}'
+          value: CHANGE_IF_NEEDED
+        - macro: '{$NET.IF.IFNAME.MATCHES}'
+          value: '^.*$'
+        - macro: '{$NET.IF.IFNAME.NOT_MATCHES}'
+          value: ^CPU$
+          description: 'Ignore the internal CPU interface'
+        - macro: '{$NET.IF.IFOPERSTATUS.MATCHES}'
+          value: '^.*$'
+        - macro: '{$NET.IF.IFOPERSTATUS.NOT_MATCHES}'
+          value: ^6$
+          description: 'Ignore notPresent(6)'
+        - macro: '{$NET.IF.IFTYPE.MATCHES}'
+          value: '.*'
+        - macro: '{$NET.IF.IFTYPE.NOT_MATCHES}'
+          value: CHANGE_IF_NEEDED
+        - macro: '{$SNMP.TIMEOUT}'
+          value: 5m
+          description: 'Time interval for the SNMP availability trigger.'
+      valuemaps:
+        - uuid: 8d15d71b38bc453c9d1707f9fb4b84b3
+          name: 'IF-MIB::ifOperStatus'
+          mappings:
+            - value: '1'
+              newvalue: up
+            - value: '2'
+              newvalue: down
+            - value: '3'
+              newvalue: testing
+            - value: '4'
+              newvalue: unknown
+            - value: '5'
+              newvalue: dormant
+            - value: '6'
+              newvalue: notPresent
+            - value: '7'
+              newvalue: lowerLayerDown
+        - uuid: 6c2d62fd2d534b359cb9521c0ec6832b
+          name: 'IF-MIB::ifType'
+          mappings:
+            - value: '1'
+              newvalue: other
+            - value: '6'
+              newvalue: ethernetCsmacd
+            - value: '24'
+              newvalue: softwareLoopback
+            - value: '53'
+              newvalue: propVirtual
+            - value: '117'
+              newvalue: gigabitEthernet
+            - value: '135'
+              newvalue: l2vlan
+            - value: '136'
+              newvalue: l3ipvlan
+            - value: '161'
+              newvalue: ieee8023adLag
+        - uuid: 54ea310256ff45868707a2e04bcb24db
+          name: 'Service state'
+          mappings:
+            - value: '0'
+              newvalue: Down
+            - value: '1'
+              newvalue: Up
+        - uuid: 0c432ffa5d9149569416699d8863e794
+          name: zabbix.host.available
+          mappings:
+            - value: '0'
+              newvalue: 'not available'
+            - value: '1'
+              newvalue: available
+            - value: '2'
+              newvalue: unknown
